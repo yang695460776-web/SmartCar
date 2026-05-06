@@ -23,10 +23,11 @@ public:
           _lastOpMs(0),
           _opMutex(nullptr) {}
 
-    // Default behavior for your wiring (one pin -> one MOS):
-    // OFF/LOCK uses _lockPin pulse, not _powerPin.
-    // If your controller toggles power on/off using the same "power button" pin, set this to false.
-    static constexpr bool USE_LOCK_PIN_FOR_OFF = true;
+    // Your scooter wiring:
+    // - POWER_ON pin simulates the "power" button (turn on)
+    // - UNLOCK pin is used as "power off/shutdown"
+    // - LOCK pin currently unused but kept for manual testing
+    static constexpr bool USE_UNLOCK_PIN_FOR_OFF = true;
     // Remote-button press timing (ms). Tune if your remote expects longer/shorter press.
     static constexpr uint32_t BUTTON_PRESS_MS = 250;
     static constexpr uint32_t BUTTON_GAP_MS = 120;
@@ -47,7 +48,7 @@ public:
 
     // Unified on/off toggle:
     // - If currently OFF/locked: do POWER_ON pulse
-    // - If currently ON/unlocked: do LOCK pulse
+    // - If currently ON/unlocked: do OFF pulse (UNLOCK on your wiring)
     // NFC and fingerprint both call this.
     FunctionState toggleOnOffNfc() { return toggleOnOffWithMinInterval(MIN_ACTION_INTERVAL_MS_NFC); }
     FunctionState toggleOnOffFingerprint() { return toggleOnOffWithMinInterval(MIN_ACTION_INTERVAL_MS_FP); }
@@ -69,14 +70,16 @@ private:
 
         allOff();
         if (_isOn) {
-            if (USE_LOCK_PIN_FOR_OFF) {
-                pulseLock();
+            // Turn off/shutdown
+            if (USE_UNLOCK_PIN_FOR_OFF) {
+                pulseUnlock();
+                _lastAction = UNLOCK;
             } else {
-                // Many controllers toggle power on/off using the same "power button" pulse.
+                // Fallback: many controllers toggle power on/off using the same "power button" pulse.
                 pulsePowerOn();
+                _lastAction = POWER_ON;
             }
             _isOn = false;
-            _lastAction = LOCK;
         } else {
             pulsePowerOn();
             _isOn = true;
@@ -89,6 +92,35 @@ private:
     bool isOn() const { return _isOn; }
     FunctionState lastAction() const { return _lastAction; }
 
+public:
+    // Manual action (used by Web UI buttons).
+    void doAction(FunctionState action) {
+        lockOperation();
+        allOff();
+
+        switch (action) {
+            case POWER_ON:
+                pulsePowerOn();
+                _isOn = true;
+                _lastAction = POWER_ON;
+                break;
+            case LOCK:
+                pulseLock();
+                _lastAction = LOCK;
+                break;
+            case UNLOCK:
+                pulseUnlock();
+                _isOn = false;
+                _lastAction = UNLOCK;
+                break;
+            default:
+                break;
+        }
+
+        unlockOperation();
+    }
+
+private:
     const int _powerPin;
     const int _lockPin;
     const int _unlockPin;

@@ -114,8 +114,10 @@ void onMatched() {
     MosControl::FunctionState action = mosCtrl.toggleOnOffNfc();
     if (action == MosControl::POWER_ON) {
         webLogPrintln("动作：开 (POWER_ON)");
+    } else if (action == MosControl::UNLOCK) {
+        webLogPrintln("动作：关 (UNLOCK)");
     } else if (action == MosControl::LOCK) {
-        webLogPrintln("动作：关 (LOCK)");
+        webLogPrintln("动作：上锁 (LOCK)");
     } else {
         webLogPrintln("动作：未知");
     }
@@ -126,8 +128,10 @@ void onFingerprintMatched() {
     MosControl::FunctionState action = mosCtrl.toggleOnOffFingerprint();
     if (action == MosControl::POWER_ON) {
         webLogPrintln("指纹动作：开 (POWER_ON)");
+    } else if (action == MosControl::UNLOCK) {
+        webLogPrintln("指纹动作：关 (UNLOCK)");
     } else if (action == MosControl::LOCK) {
-        webLogPrintln("指纹动作：关 (LOCK)");
+        webLogPrintln("指纹动作：上锁 (LOCK)");
     } else {
         webLogPrintln("指纹动作：未知");
     }
@@ -426,7 +430,13 @@ void esp32_web_create() {
         if (!requireWebAuth()) return;
         String body = "<h1>智能车锁控制台</h1>"
                       "<p>欢迎回来，选择你要执行的操作。</p>"
-                      "<div class='row'><button class='btn btn-primary' onclick=\"window.location.href='/open'\">立即开门</button></div>"
+                      "<div class='row'>"
+                      "<button class='btn btn-primary' onclick=\"window.location.href='/open'\">一键开/关</button>"
+                      "<button class='btn btn-ok' onclick=\"window.location.href='/power_on'\">开机 (POWER)</button>"
+                      "<button class='btn btn-warn' onclick=\"window.location.href='/unlock'\">关机 (UNLOCK)</button>"
+                      "<button class='btn btn-ghost' onclick=\"window.location.href='/lock'\">上锁 (LOCK)</button>"
+                      "</div>"
+                      "<div class='row'><a class='btn btn-ghost' href='/logs'>查看日志</a></div>"
                       "<div class='row'>"
                       "<button class='btn btn-ok' onclick=\"window.location.href='/add_card'\">添加卡片</button>"
                       "<button class='btn btn-primary' onclick=\"window.location.href='/manage_cards'\">管理卡片</button>"
@@ -439,6 +449,26 @@ void esp32_web_create() {
     });
 
     server.on("/open", HTTP_GET, []() { if (!requireWebAuth()) return; web_callback_func(); });
+
+    // Manual MOS actions (for wiring verification)
+    server.on("/power_on", HTTP_GET, []() {
+        if (!requireWebAuth()) return;
+        webLogPrintln("网页手动：开机 (POWER_ON)");
+        mosCtrl.doAction(MosControl::POWER_ON);
+        server.send(200, "text/html", uiPage("开机", "<h1>已发送开机脉冲</h1><div class='row'><a class='btn btn-primary' href='/'>返回主页</a></div>"));
+    });
+    server.on("/unlock", HTTP_GET, []() {
+        if (!requireWebAuth()) return;
+        webLogPrintln("网页手动：关机 (UNLOCK)");
+        mosCtrl.doAction(MosControl::UNLOCK);
+        server.send(200, "text/html", uiPage("关机", "<h1>已发送关机脉冲 (UNLOCK)</h1><div class='row'><a class='btn btn-primary' href='/'>返回主页</a></div>"));
+    });
+    server.on("/lock", HTTP_GET, []() {
+        if (!requireWebAuth()) return;
+        webLogPrintln("网页手动：上锁 (LOCK)");
+        mosCtrl.doAction(MosControl::LOCK);
+        server.send(200, "text/html", uiPage("上锁", "<h1>已发送上锁脉冲 (LOCK)</h1><div class='row'><a class='btn btn-primary' href='/'>返回主页</a></div>"));
+    });
 
     // Logs viewer
     server.on("/logs", HTTP_GET, []() {
